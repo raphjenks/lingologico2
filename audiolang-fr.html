@@ -1,0 +1,129 @@
+<script type="text/javascript">
+  var recognizing;
+  var recognition;
+  var isRecording = false; // Variable to track the recording status
+
+  // Check browser support and create SpeechRecognition object
+  if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+    // Initialize the SpeechRecognition object
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.continuous = true;
+    recognition.lang = 'fr-FR';
+    recognition.interimResults = true;
+    reset();
+
+    recognition.onstart = function() {
+      sendMicStatus(true); // Send microphone status to the parent window when recording starts
+    };
+
+    recognition.onend = function() {
+      sendMicStatus(false); // Send microphone status to the parent window when recording stops
+      reset(); // Reset the button text
+      if (isRecording) {
+        startRecognition(); // Start recognition again if isRecording is true
+      }
+    };
+
+    recognition.onresult = function(event) {
+      var final = "";
+      var interim = "";
+      for (var i = 0; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          final += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      
+      // Send both final and interim transcriptions to the parent window
+      var transcription = {
+        final: final,
+        interim: interim
+      };
+      window.parent.postMessage(transcription, '*');
+      
+      // Clear the HTML elements
+      final_span.innerHTML = "";
+      interim_span.innerHTML = "";
+    };
+
+    // Add event listener to listen for postMessage from the parent
+    window.addEventListener('message', function(event) {
+      if (event.data === 'start') {
+        startRecognition();
+      } else if (event.data === 'stop') {
+        stopRecognition();
+      } else if (event.data === 'interrupt') {
+        interruptRecognition();
+      } else if (event.data === 'abort') {
+        abortRecognition();
+      }
+    });
+  } else {
+    console.log('Speech recognition not supported');
+    // Handle the case when speech recognition is not supported in the browser
+  }
+
+  function reset() {
+    recognizing = false;
+    isRecording = false;
+    button.innerHTML = "Click to Start";
+    document.getElementById("final_span").innerHTML = "";
+  }
+
+  function toggleStartStop() {
+    if (recognizing) {
+      stopRecognition();
+    } else {
+      startRecognition();
+    }
+  }
+
+  function startRecognition() {
+    if (!recognizing) {
+      recognition.start();
+      recognizing = true;
+      isRecording = true; // Set isRecording to true
+      button.innerHTML = "Click to Stop";
+      final_span.innerHTML = "";
+      interim_span.innerHTML = "";
+    }
+  }
+
+  function stopRecognition() {
+    if (recognizing) {
+      recognition.stop();
+      recognizing = false;
+      isRecording = false; // Set isRecording to false
+      button.innerHTML = "Click to Start";
+      sendMicStatus(isRecording); // Send microphone status to the parent window
+    }
+  }
+
+  function abortRecognition() {
+    if (recognizing) {
+      recognition.abort();
+      recognizing = false;
+      isRecording = false; // Set isRecording to false
+      button.innerHTML = "Click to Start";
+      sendMicStatus(isRecording); // Send microphone status to the parent window
+    }
+  }
+
+  function interruptRecognition() {
+    if (recognizing) {
+      recognition.abort();
+      reset(); // Reset the button text and other variables
+      setTimeout(function() {
+        startRecognition(); // Restart the speech recognition with a small delay
+      }, 50); // Adjust the delay as needed
+    }
+  }
+
+  function sendMicStatus(isRecording) {
+    var micStatus = {
+      isRecording: isRecording
+    };
+    window.parent.postMessage(micStatus, '*');
+  }
+</script>
