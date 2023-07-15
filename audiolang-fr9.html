@@ -1,0 +1,117 @@
+. <script type="text/javascript">
+  var recognizing;
+  var recognition;
+  var isRecording = false; 
+
+  if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.continuous = true;
+    recognition.lang = 'fr-FR';
+    recognition.interimResults = true;
+    reset();
+
+    recognition.onstart = function() {
+      sendMicStatus(true); 
+    };
+
+    recognition.onend = function() {
+      sendMicStatus(false);
+      reset(); 
+      if (isRecording) {
+        startRecognition();
+      }
+    };
+
+    recognition.onresult = function(event) {
+      var final = "";
+      var interim = "";
+      for (var i = 0; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          final += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+
+      var transcription = {
+        final: final,
+        interim: interim
+      };
+      window.parent.postMessage(transcription, '*');
+    };
+
+    window.addEventListener('message', function(event) {
+      if (event.data === 'start') {
+        startRecognition();
+      } else if (event.data === 'stop') {
+        stopRecognition();
+      } else if (event.data === 'interrupt') {
+        interruptRecognition();
+      } else if (event.data === 'abort') {
+        abortRecognition();
+      }
+    });
+  } else {
+    console.log('Speech recognition not supported');
+  }
+
+  function reset() {
+    recognizing = false;
+    isRecording = false;
+    button.innerHTML = "Click to Start";
+  }
+
+  function toggleStartStop() {
+    if (recognizing) {
+      stopRecognition();
+    } else {
+      startRecognition();
+    }
+  }
+
+  function startRecognition() {
+    if (!recognizing) {
+      recognition.start();
+      recognizing = true;
+      isRecording = true; 
+      button.innerHTML = "Click to Stop";
+    }
+  }
+
+  function stopRecognition() {
+    if (recognizing) {
+      recognition.stop();
+      recognizing = false;
+      isRecording = false; 
+      button.innerHTML = "Click to Start";
+      sendMicStatus(isRecording); 
+    }
+  }
+
+  function abortRecognition() {
+    if (recognizing) {
+      recognition.abort();
+      recognizing = false;
+      isRecording = false; 
+      button.innerHTML = "Click to Start";
+      sendMicStatus(isRecording);
+    }
+  }
+
+  function interruptRecognition() {
+    if (recognizing) {
+      recognition.abort();
+      reset(); 
+      setTimeout(function() {
+        startRecognition(); 
+      },50); 
+    }
+  }
+
+  function sendMicStatus(isRecording) {
+    var micStatus = {
+      isRecording: isRecording
+    };
+    window.parent.postMessage(micStatus, '*');
+  }
+</script>  
