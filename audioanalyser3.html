@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audio Analyser</title>
+</head>
+<body>
+    <!-- Your HTML content here -->
+    <canvas id="waveCanvas" width="800" height="400"></canvas>
+
+    <script>
+        // Your JavaScript code here
+        async function initializeAudio() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const audioContext = new AudioContext();
+            const mediaStreamAudioSourceNode = audioContext.createMediaStreamSource(stream);
+            const analyserNode = audioContext.createAnalyser();
+
+            mediaStreamAudioSourceNode.connect(analyserNode);
+
+            const canvas = document.getElementById("waveCanvas");
+            const ctx = canvas.getContext("2d");
+            
+            const pcmData = new Float32Array(analyserNode.fftSize);
+
+            const onFrame = () => {
+                analyserNode.getFloatTimeDomainData(pcmData);
+                drawWaveform(pcmData);
+                window.requestAnimationFrame(onFrame);
+            };
+
+            const drawWaveform = (pcmData) => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.beginPath();
+                for (let i = 0; i < pcmData.length; i++) {
+                    const x = i * (canvas.width / pcmData.length);
+                    const y = (pcmData[i] + 1) * canvas.height / 2;
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            };
+
+            window.requestAnimationFrame(onFrame);
+        }
+
+        // Initialize audio when the document is ready
+        document.addEventListener("DOMContentLoaded", function() {
+            initializeAudio();
+        });
+    </script>
+</body>
+</html>
