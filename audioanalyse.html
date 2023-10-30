@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audio Analyser</title>
+</head>
+<body>
+    <!-- Your HTML content here -->
+    <input type="range" id="volumeMeter" min="0" max="1" step="0.01">
+
+    <script>
+        // Your JavaScript code here
+        async function initializeAudio() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const audioContext = new AudioContext();
+            const mediaStreamAudioSourceNode = audioContext.createMediaStreamSource(stream);
+            const analyserNode = audioContext.createAnalyser();
+            mediaStreamAudioSourceNode.connect(analyserNode);
+
+            const pcmData = new Float32Array(analyserNode.fftSize);
+            const volumeMeterEl = document.getElementById("volumeMeter");
+
+            const onFrame = () => {
+                analyserNode.getFloatTimeDomainData(pcmData);
+                let sumSquares = 0.0;
+                for (const amplitude of pcmData) {
+                    sumSquares += amplitude * amplitude;
+                }
+                volumeMeterEl.value = Math.sqrt(sumSquares / pcmData.length);
+                window.requestAnimationFrame(onFrame);
+            };
+            window.requestAnimationFrame(onFrame);
+        }
+
+        // Initialize audio when the document is ready
+        document.addEventListener("DOMContentLoaded", function() {
+            initializeAudio();
+        });
+    </script>
+</body>
+</html>
