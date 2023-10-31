@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech Recognition and Audio Visualizer</title>
+  <style>
+    /* Removed canvas border */
+    canvas {
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Canvas for Audio Visualizer -->
+  <canvas id="waveCanvas" width="378" height="50"></canvas>
+  
+  <script type="text/javascript">
+    // Speech Recognition Code
+    var recognizing;
+    var recognition;
+    var isRecording = false; 
+
+    function reset() {
+      recognizing = false;
+      isRecording = false;
+    }
+
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.continuous = true;
+      recognition.lang = 'fr-FR';
+      recognition.interimResults = true;
+      reset();
+
+      recognition.onstart = function() {
+        sendMicStatus(true);
+        isRecording = true;
+      };
+
+      recognition.onend = function() {
+        sendMicStatus(false);
+        isRecording = false;
+      };
+
+      recognition.onresult = function(event) {
+        var interim = "";
+        for (var i = 0; i < event.results.length; ++i) {
+          interim += event.results[i][0].transcript;
+        }
+        var transcription = {
+          interim: interim
+        };
+        window.parent.postMessage(transcription, '*');
+      };
+
+      window.addEventListener('message', function(event) {
+        if (event.data === 'start') {
+          startRecognition();
+        } else if (event.data === 'stop') {
+          stopRecognition();
+        } else if (event.data === 'interrupt') {
+          interruptRecognition();
+        } else if (event.data === 'abort') {
+          abortRecognition();
+        }
+      });
+    } else {
+      console.log('Speech recognition not supported');
+    }
+
+    function startRecognition() {
+      if (!recognizing) {
+        initializeAudio(); // Initialize audio visualizer here
+        recognition.start();
+        recognizing = true;
+        isRecording = true;
+      }
+    }
+
+    function stopRecognition() {
+      if (recognizing) {
+        recognition.stop();
+        recognizing = false;
+        isRecording = false;
+        sendMicStatus(isRecording);
+      }
+    }
+
+    function abortRecognition() {
+      if (recognizing) {
+        recognition.abort();
+        recognizing = false;
+        isRecording = false;
+        sendMicStatus(isRecording);
+      }
+    }
+
+    function interruptRecognition() {
+      if (recognizing) {
+        recognition.abort();
+        reset();
+        setTimeout(function() {
+          startRecognition(); 
+        },50); 
+      }
+    }
+
+    function sendMicStatus(isRecording) {
+      var micStatus = {
+        isRecording: isRecording
+      };
+      window.parent.postMessage(micStatus, '*');
+    }
+    
+    // Audio Visualizer Code
+    async function initializeAudio() {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const audioContext = new AudioContext();
+      const mediaStreamAudioSourceNode = audioContext.createMediaStreamSource(stream);
+      const analyserNode = audioContext.createAnalyser();
+  
+      mediaStreamAudioSourceNode.connect(analyserNode);
+  
+      const canvas = document.getElementById("waveCanvas");
+      const ctx = canvas.getContext("2d");
+      const pcmData = new Float32Array(analyserNode.fftSize);
+  
+      const drawWaveform = (pcmData) => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
+        ctx.lineWidth = 2; // 2 pixels thick
+        ctx.strokeStyle = "black"; // Black color
+        for (let i = 0; i < pcmData.length; i++) {
+          const x = i * (canvas.width / pcmData.length);
+          const y = (pcmData[i] + 1) * canvas.height / 2;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      };
+  
+      const onFrame = () => {
+        analyserNode.getFloatTimeDomainData(pcmData);
+        drawWaveform(pcmData);
+        window.requestAnimationFrame(onFrame);
+      };
+  
+      window.requestAnimationFrame(onFrame);
+    }
+  
+    // Initialize audio when the document is ready
+    document.addEventListener("DOMContentLoaded", function() {
+      // Removed initializeAudio here
+      // You can also initialize the speech recognition here, if needed.
+    });
+  </script>
+</body>
+</html>
