@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audio Analyser and Speech Recognition</title>
+</head>
+<body>
+    <canvas id="waveCanvas" width="378" height="50"></canvas>
+    <button id="button" onclick="toggleStartStop()">Click to Start</button>
+
+    <script>
+        var shouldDrawWaveform = false;  // Control variable for drawing waveform
+
+        // Speech Recognition Initialization
+        var recognizing;
+        var recognition;
+        var isRecording = false; 
+        var button = document.getElementById("button");
+
+        function reset() {
+            recognizing = false;
+            shouldDrawWaveform = false;
+            isRecording = false;
+            button.innerHTML = "Click to Start";
+        }
+
+        async function initializeAudio() {
+            // Audio Visualization Initialization
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const audioContext = new AudioContext();
+            const mediaStreamAudioSourceNode = audioContext.createMediaStreamSource(stream);
+            const analyserNode = audioContext.createAnalyser();
+            
+            mediaStreamAudioSourceNode.connect(analyserNode);
+
+            const canvas = document.getElementById("waveCanvas");
+            const ctx = canvas.getContext("2d");
+            ctx.strokeStyle = "white";  // Set line color to white
+            
+            const pcmData = new Float32Array(analyserNode.fftSize);
+
+            const onFrame = () => {
+                if (shouldDrawWaveform) {
+                    analyserNode.getFloatTimeDomainData(pcmData);
+                    drawWaveform(pcmData);
+                } else {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+                window.requestAnimationFrame(onFrame);
+            };
+
+            const drawWaveform = (pcmData) => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.beginPath();
+                for (let i = 0; i < pcmData.length; i++) {
+                    const x = i * (canvas.width / pcmData.length);
+                    const y = (pcmData[i] + 1) * canvas.height / 2;
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            };
+
+            window.requestAnimationFrame(onFrame);
+        }
+
+        if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.continuous = true;
+            recognition.lang = 'fr-FR';
+            recognition.interimResults = true;
+            reset();
+
+            recognition.onstart = function() {
+                shouldDrawWaveform = true;
+                isRecording = true;
+                button.innerHTML = "Click to Stop";
+            };
+
+            recognition.onend = function() {
+                shouldDrawWaveform = false;
+                isRecording = false;
+                button.innerHTML = "Click to Start";
+                if (isRecording) {
+                    startRecognition();
+                }
+            };
+
+            recognition.onresult = function(event) {
+                var interim = "";
+                for (var i = 0; i < event.results.length; ++i) {
+                    interim += event.results[i][0].transcript;
+                }
+
+                var transcription = {
+                    interim: interim
+                };
+                window.parent.postMessage(transcription, '*');
+            };
+        } else {
+            console.log('Speech recognition not supported');
+        }
+
+        function toggleStartStop() {
+            if (recognizing) {
+                stopRecognition();
+            } else {
+                startRecognition();
+            }
+        }
+
+        async function startRecognition() {
+            if (!recognizing) {
+                await initializeAudio();  // Initialize audio here
+                recognition.start();
+                recognizing = true;
+                shouldDrawWaveform = true;
+                isRecording = true; 
+                button.innerHTML = "Click to Stop";
+            }
+        }
+
+        function stopRecognition() {
+            if (recognizing) {
+                recognition.stop();
+                recognizing = false;
+                shouldDrawWaveform = false;
+                isRecording = false; 
+                button.innerHTML = "Click to Start";
+            }
+        }
+
+        function abortRecognition() {
+            if (recognizing) {
+                recognition.abort();
+                recognizing = false;
+                shouldDrawWaveform = false;
+                isRecording = false; 
+                button.innerHTML = "Click to Start";
+            }
+        }
+    </script>
+</body>
+</html>
+
