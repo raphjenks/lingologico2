@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audio Analyser</title>
+    <style>
+        /* Hide canvas by default */
+        #waveCanvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Your HTML content here -->
+    <canvas id="waveCanvas" width="378" height="50"></canvas>
+
+    <script>
+        let audioContext, mediaStreamAudioSourceNode, analyserNode, animationFrameId = null;
+        let pcmData, canvas, ctx;
+        // Function to start visualizer
+        async function startVisualizer() {
+            if (!audioContext) {
+                // Only initialize audio context and nodes if they don't exist
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                audioContext = new AudioContext();
+                mediaStreamAudioSourceNode = audioContext.createMediaStreamSource(stream);
+                analyserNode = audioContext.createAnalyser();
+
+                mediaStreamAudioSourceNode.connect(analyserNode);
+            }
+
+            // Show canvas
+            canvas = document.getElementById("waveCanvas");
+            canvas.style.display = "block";
+            ctx = canvas.getContext("2d");
+            
+            pcmData = new Float32Array(analyserNode.fftSize);
+            animationFrameId = window.requestAnimationFrame(onFrame);
+        }
+
+        // Function to stop visualizer
+        function stopVisualizer() {
+            // Hide canvas
+            if (canvas) {
+                canvas.style.display = "none";
+            }
+
+            // Cancel animation frame
+            if (animationFrameId !== null) {
+                window.cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+        }
+
+        const onFrame = () => {
+            analyserNode.getFloatTimeDomainData(pcmData);
+            drawWaveform(pcmData);
+            animationFrameId = window.requestAnimationFrame(onFrame);
+        };
+
+        const drawWaveform = (pcmData) => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            for (let i = 0; i < pcmData.length; i++) {
+                const x = i * (canvas.width / pcmData.length);
+                const y = (pcmData[i] + 1) * canvas.height / 2;
+                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        };
+
+        // Initialize audio when the document is ready
+        document.addEventListener("DOMContentLoaded", function() {
+            // Intentionally left blank. Will only initialize when startVisualizer() is called.
+        });
+    </script>
+
+    <script>
+        // Example usage:
+        // To start the visualizer, run: startVisualizer();
+        // To stop the visualizer, run: stopVisualizer();
+    </script>
+</body>
+</html>
