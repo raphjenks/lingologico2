@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audio Analyser</title>
+    <style>
+        /* Hide canvas by default */
+        #waveCanvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="waveCanvas" width="378" height="50"></canvas>
+
+    <script>
+        let audioContext = null, mediaStreamAudioSourceNode = null, analyserNode = null, animationFrameId = null;
+        let pcmData, canvas, ctx;
+
+        // Function to start visualizer
+        async function startVisualizer() {
+            try {
+                if (!audioContext) {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                    audioContext = new AudioContext();
+                    mediaStreamAudioSourceNode = audioContext.createMediaStreamSource(stream);
+                    analyserNode = audioContext.createAnalyser();
+
+                    mediaStreamAudioSourceNode.connect(analyserNode);
+                }
+
+                // Show canvas
+                canvas = document.getElementById("waveCanvas");
+                canvas.style.display = "block";
+                ctx = canvas.getContext("2d");
+                
+                pcmData = new Float32Array(analyserNode.fftSize);
+                animationFrameId = window.requestAnimationFrame(onFrame);
+            } catch (error) {
+                console.error("Error initializing audio:", error);
+            }
+        }
+
+        // Function to stop visualizer
+        function stopVisualizer() {
+            if (canvas) {
+                canvas.style.display = "none";
+            }
+            if (animationFrameId !== null) {
+                window.cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            if (mediaStreamAudioSourceNode && analyserNode) {
+                mediaStreamAudioSourceNode.disconnect(analyserNode);
+            }
+            if (audioContext) {
+                audioContext.close().then(() => {
+                    audioContext = null;
+                });
+            }
+        }
+
+        const onFrame = () => {
+            analyserNode.getFloatTimeDomainData(pcmData);
+            drawWaveform(pcmData);
+            animationFrameId = window.requestAnimationFrame(onFrame);
+        };
+
+        const drawWaveform = (pcmData) => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            for (let i = 0; i < pcmData.length; i++) {
+                const x = i * (canvas.width / pcmData.length);
+                const y = (pcmData[i] + 1) * canvas.height / 2;
+                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.stroke(); // Added this line to actually draw the stroke
+        }
+    </script>
+
+    <script>
+        var recognizing;
+        var recognition;
+        var isRecording = false; 
+
+        function reset() {
+            recognizing = false;
+            isRecording = false;
+        }
+
+        if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.continuous = true;
+            recognition.lang = 'fr-FR';
+            recognition.interimResults = true;
+            reset();
+
+            recognition.onstart = function() {
+                isRecording = true;
+            };
+
+            recognition.onend = function() {
+                isRecording = false;
+                if (isRecording) {
+                    startRecognition();startVisualizer();
+                }
+            };
+
+            recognition.onresult = function(event) {
+                var interim = "";
+                for (var i = 0; i < event.results.length; ++i) {
+                    interim += event.results[i][0].transcript;
+                }
+
+                var transcription = {
+                    interim: interim
+                };
+                window.parent.postMessage(transcription, '*');
+            };
+
+            window.addEventListener('message', function(event) {
+                if (event.data === 'start') {
+                    startRecognition();startVisualizer();
+                } else if (event.data === 'stop') {
+                    stopRecognition(); stopVisualizer()
+                } else if (event.data === 'interrupt') {
+                    interruptRecognition(); stopVisualizer()
+                } else if (event.data === 'abort') {
+                    abortRecognition(); stopVisualizer()
+                }
+            });
+        } else {
+            console.log('Speech recognition not supported');
+        }
+
+        function toggleStartStop() {
+            if (recognizing) {
+                stopRecognition(); stopVisualizer()
+            } else {
+                startRecognition();startVisualizer();
+            }
+        }
+
+        function startRecognition() {
+            if (!recognizing) {
+startVisualizer();
+                recognition.start();
+                recognizing = true;
+                isRecording = true; 
+            }
+        }
+
+        function stopRecognition() {
+            if (recognizing) { stopVisualizer();
+                recognition.stop();
+                recognizing = false;
+                isRecording = false; 
+            }
+        }
+
+        function abortRecognition() {
+            if (recognizing) {
+                recognition.abort(); stopVisualizer();
+                recognizing = false;
+                isRecording = false; 
+            }
+        }
+
+        function interruptRecognition() {
+            if (recognizing) {
+                recognition.abort(); stopVisualizer();
+                reset();
+                setTimeout(function() {
+                    startRecognition(); startVisualizer()
+                },50); 
+            }
+        }
+    </script>
+</body>
+</html>
