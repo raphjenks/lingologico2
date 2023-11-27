@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech Recognition and Audio Visualizer</title>
+  <style>
+    canvas {
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="waveCanvas" width="330" height="50"></canvas>
+  
+  <script type="text/javascript">
+    var recognizing;
+    var globalStream = null;
+    var recognition;
+    var isRecording = false; 
+    let animationId = null;
+    let audioContext = null;
+    let mediaStreamAudioSourceNode = null;
+    let analyserNode = null;
+
+    function reset() {
+      recognizing = false;
+      isRecording = false;
+    }
+
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.continuous = true;
+      recognition.lang = 'fr-FR';
+      recognition.interimResults = true;
+      reset();
+
+      recognition.onstart = function() {
+        sendMicStatus(true);
+        isRecording = true;
+      };
+
+      recognition.onend = function() {
+        sendMicStatus(false);
+        stopAudioVisualizer();
+        isRecording = false;
+      };
+
+      recognition.onresult = function(event) {
+        var interim = "";
+        for (var i = 0; i < event.results.length; ++i) {
+          interim += event.results[i][0].transcript;
+        }
+        var transcription = {
+          interim: interim
+        };
+        window.parent.postMessage(transcription, '*');
+      };
+
+      window.addEventListener('message', function(event) {
+        if (event.data === 'start') {
+          startRecognition();
+        } else if (event.data === 'stop') {
+          stopRecognition();
+          stopAudioVisualizer();
+        } else if (event.data === 'interrupt') {
+          interruptRecognition();
+        } else if (event.data === 'abort') {
+          abortRecognition();
+        }
+      });
+    } else {
+      console.log('Speech recognition not supported');
+    }
+
+    function startRecognition() {
+      if (!recognizing) {
+        recognition.start();
+        recognizing = true;
+        isRecording = true;
+        startAudioVisualizer();
+      }
+    }
+
+    function stopRecognition() {
+      if (recognizing) {
+        recognition.stop();
+        recognizing = false;
+        isRecording = false;
+        sendMicStatus(isRecording);
+        stopAudioVisualizer();
+      }
+    }
+
+    function abortRecognition() {
+      if (recognizing) {
+        recognition.abort();
+        recognizing = false;
+        isRecording = false;
+        sendMicStatus(isRecording);
+        stopAudioVisualizer();
+      }
+    }
+
+    function interruptRecognition() {
+      if (recognizing) {
+        recognition.abort();
+        reset();
+        setTimeout(function() {
+          startRecognition(); 
+        },50); 
+      }
+    }
+
+    function sendMicStatus(isRecording) {
+      var micStatus = {
+        isRecording: isRecording
+      };
+      window.parent.postMessage(micStatus, '*');
+    }
+
+    async function startAudioVisualizer() {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      globalStream = stream;
+      audioContext = new AudioContext();
+      mediaStreamAudioSourceNode = audioContext.createMediaStreamSource(stream);
+      analyserNode = audioContext.createAnalyser();
+      
+      mediaStreamAudioSourceNode.connect(analyserNode);
+      
+      const canvas = document.getElementById("waveCanvas");
+      const ctx = canvas.getContext("2d");
+      const pcmData = new Float32Array(analyserNode.fftSize);
+      
+      const onFrame = () => {
+        analyserNode.getFloatTimeDomainData(pcmData);
+        drawWaveform(pcmData, ctx, canvas);
+        animationId = window.requestAnimationFrame(onFrame);
+      };
+      
+      animationId = window.requestAnimationFrame(onFrame);
+    }
+
+    function stopAudioVisualizer() {
+      if (animationId) {
+        window.cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      if (mediaStreamAudioSourceNode && analyserNode) {
+        mediaStreamAudioSourceNode.disconnect(analyserNode);
+        analyserNode = null;
+        mediaStreamAudioSourceNode = null;
+      }
+
+      // The check for globalStream should be outside of the if block for audioContext
+      // Stop all the tracks on the global stream
+      if (globalStream) {
+        globalStream.getTracks().forEach(track => track.stop());
+        globalStream = null; // Clear the global stream
+      }
+
+      // Close the audio context if it exists
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+    }
+
+    const drawWaveform = (pcmData, ctx, canvas) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Check if there is any significant amplitude in the audio signal
+      const hasNoise = pcmData.some(value => Math.abs(value) > 0.02);
+
+      if (hasNoise) {
+        ctx.beginPath();
+        for (let i = 0; i < pcmData.length; i++) {
+          const x = i * (canvas.width / pcmData.length);
+          const y = (pcmData[i] + 1) * canvas.height / 2;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+    };
+  </script>
+</body>
+</html>
